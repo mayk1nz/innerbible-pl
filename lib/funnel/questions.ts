@@ -245,14 +245,18 @@ export const OFFER = {
   product: 'Chronologiczne Streszczenie',
   extra: '+ 9 wyjątkowych prezentów',
   button: 'Kliknij tutaj i zdobądź swój materiał',
-  bullets: ['Dożywotni dostęp', '30 dni gwarancji'],
+  bullets: ['Natychmiastowy dostęp', '30 dni gwarancji'],
+  perMonth: '/mies.',
 }
 
-/** Replaces the owner's Spanish payment-info image with the same message in Polish. */
+/**
+ * Payment info under the button. The front is a MONTHLY subscription, so this must
+ * never say "jednorazowa płatność" / "bez miesięcznych opłat" (the owner's old image said so).
+ */
 export const PAYMENT_NOTE = {
-  badge: 'Dożywotni dostęp!',
-  once: 'Jednorazowa płatność',
-  noFees: 'Bez miesięcznych opłat i bez odnowień.',
+  badge: 'Natychmiastowy dostęp!',
+  plan: 'Subskrypcja miesięczna',
   calm: 'Bez obaw!',
-  convert: 'Kwota zostanie automatycznie przeliczona na walutę twojego kraju po kliknięciu przycisku. Możesz też zapłacić lokalnymi metodami płatności.',
+  convert:
+    'Kwota zostanie automatycznie przeliczona na walutę twojego kraju po kliknięciu przycisku „Kliknij tutaj i zdobądź swój materiał”. Możesz też zapłacić lokalnymi metodami płatności dostępnymi w twoim kraju.',
 }

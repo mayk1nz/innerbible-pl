@@ -7,11 +7,13 @@ import { LockedProduct } from '../cards'
 import { Icon, type IconName } from '../icons'
 import { PageHeader } from '../PageHeader'
 import { Avatar, FontScaleControl, buttonClass } from '../ui'
-import type { Lesson } from '@/lib/catalog'
+import type { Lesson, LessonContent } from '@/lib/catalog'
+import { loadPlanDay } from '@/lib/content/plans/load'
+import { trackFor } from '@/lib/player'
 import { SEED_POSTS, SEED_REFLECTIONS } from '@/lib/community-seed'
 import { POINTS } from '@/lib/config'
 import { computeStats } from '@/lib/gamification'
-import { findLesson, isOwned, lessonHref, lessonKey, type LessonRef } from '@/lib/progress'
+import { findLesson, isOwned, lessonHref, lessonKey, planDayStatus, type LessonRef } from '@/lib/progress'
 import {
   completeLesson,
   saveReflection,
@@ -30,7 +32,7 @@ export function LessonView({ productId, lessonId }: { productId: string; lessonI
   const s = useAppState()
   const ref = findLesson(productId, lessonId)
   if (!ref) return null
-  if (!isOwned(ref.product, s.owned)) return <LockedProduct product={ref.product} email={s.session?.email} />
+  if (!isOwned(ref.product, s.owned)) return <LockedProduct product={ref.product} />
   // Keyed per lesson so drafts and the "just completed" moment never leak between lessons.
   return <LessonReader key={`${productId}/${lessonId}`} lessonRef={ref} state={s} />
 }
@@ -42,10 +44,41 @@ function LessonReader({ lessonRef, state: s }: { lessonRef: LessonRef; state: Ap
   const stats = useMemo(() => computeStats(s, today), [s, today])
   const done = Boolean(s.completed[key])
   const [celebrate, setCelebrate] = useState(false)
+  // Plan days open one at a time; a day not open yet shows when it opens instead.
+  const status = planDayStatus(product.id, section, lesson.id, s.completed, today)
+  const waiting = status === 'locked' || status === 'tomorrow'
+  const dayN = section.lessons.findIndex((l) => l.id === lesson.id) + 1
+  const nextStatus = next ? planDayStatus(product.id, section, next.id, s.completed, today) : null
+  const nextInPlan = Boolean(section.plan && next && section.lessons.some((l) => l.id === next.id))
+  const track = lesson.format === 'audio' ? trackFor(product, lesson) : null
 
   useEffect(() => {
-    setLastLesson(key)
-  }, [key])
+    if (!waiting) setLastLesson(key)
+  }, [key, waiting])
+
+  if (waiting) {
+    return (
+      <>
+        <PageHeader back={`/modul/${product.id}`} eyebrow={`${section.tab ?? section.title} · ${lesson.title}`} title={lesson.subtitle ?? lesson.title} />
+        <div className="rounded-3xl border border-line bg-surface p-6 text-center shadow-card">
+          <span className="mx-auto grid size-14 place-items-center rounded-full bg-gold-soft text-gold">
+            <Icon name={status === 'tomorrow' ? 'calendar' : 'lock'} className="size-7" />
+          </span>
+          <p className="mt-4 font-serif text-[21px] font-semibold text-ink">
+            {status === 'tomorrow' ? `Dzień ${dayN} otworzy się jutro` : `Najpierw Dzień ${dayN - 1}`}
+          </p>
+          <p className="mx-auto mt-2 max-w-xs text-[15.5px] leading-relaxed text-muted">
+            {status === 'tomorrow'
+              ? 'Dzisiejszy krok już za tobą. Jeden dzień naraz: wróć jutro, żeby iść dalej.'
+              : `Ten plan przechodzi się dzień po dniu. Ukończ Dzień ${dayN - 1}, żeby pójść dalej.`}
+          </p>
+          <Link href={`/modul/${product.id}`} className={`${buttonClass.secondary} mt-5`}>
+            Wróć do planu
+          </Link>
+        </div>
+      </>
+    )
+  }
 
   const toggle = () => {
     if (done) {
@@ -59,46 +92,48 @@ function LessonReader({ lessonRef, state: s }: { lessonRef: LessonRef; state: Ap
 
   return (
     <>
-      <PageHeader back={`/modul/${product.id}`} eyebrow={section.title} title={lesson.title} />
+      <PageHeader
+        back={`/modul/${product.id}`}
+        eyebrow={section.plan ? `${section.tab ?? section.title} · ${lesson.title}` : section.title}
+        title={lesson.subtitle ?? lesson.title}
+      />
 
       <div className="mb-5 flex items-center justify-between gap-3">
         <p className="text-[14.5px] leading-snug text-muted">
-          {product.title}
+          {section.plan ? section.title : product.title}
           <br />
-          Lekcja {index + 1} z {total}
+          {section.plan ? `Dzień ${dayN} z ${section.lessons.length}` : `Lekcja ${index + 1} z ${total}`}
         </p>
         <FontScaleControl scale={s.fontScale} />
       </div>
 
-      {lesson.format === 'audio' && (
+      {track && (
         <div className="mb-5">
-          <AudioPlayer
-            src={lesson.audioSrc}
-            positionKey={key}
-            onEnded={() => {
-              if (!done) {
-                completeLesson(key)
-                setCelebrate(true)
-              }
-            }}
-          />
+          <AudioPlayer track={track} cover={product.cover} />
         </div>
       )}
 
-      <LessonBody lesson={lesson} scale={s.fontScale} />
+      {/* An audio lesson is the audio; its text shows only when there is one. */}
+      {(lesson.format !== 'audio' || lesson.content) && <LessonBody lesson={lesson} scale={s.fontScale} />}
 
       <CompletionCard
         done={done}
         celebrate={celebrate}
         streak={stats.streak}
         onToggle={toggle}
-        next={next ? { href: lessonHref(product.id, next.id), title: next.title } : null}
+        isPlanDay={Boolean(section.plan)}
+        next={
+          next && !(nextInPlan && nextStatus !== 'open' && nextStatus !== 'done')
+            ? { href: lessonHref(product.id, next.id), title: next.title }
+            : null
+        }
+        opensTomorrow={nextInPlan && nextStatus === 'tomorrow' ? next?.title ?? null : null}
       />
 
       <ReflectionBox lessonKey={key} existing={s.reflections[key]} />
       <SharedReflections lessonKey={key} mine={s.reflections[key]} myPosts={s.posts} myName={s.session?.name ?? 'Ty'} />
 
-      <nav aria-label="Pozostałe lekcje" className="mt-10 grid grid-cols-2 gap-3">
+      <nav aria-label="Inne lekcje" className="mt-10 grid grid-cols-2 gap-3">
         {prev ? (
           <Link href={lessonHref(product.id, prev.id)} className="rounded-2xl border border-line bg-surface p-3.5 transition hover:bg-surface-hover">
             <span className="flex items-center gap-1 text-[13.5px] text-muted">
@@ -140,8 +175,61 @@ function Fact({ icon, label, value }: { icon: IconName; label: string; value: st
   )
 }
 
+/** A task written as "Intro: 1) … 2) … 3) …" shows its steps as a numbered list. */
+function TaskText({ text }: { text: string }) {
+  const parts = text.split(/\s(?=\d\)\s)/)
+  if (parts.length < 3) return <p className="mt-1.5 font-serif text-[1.05em] leading-relaxed">{text}</p>
+  const [intro, ...steps] = parts
+  return (
+    <div className="mt-1.5 font-serif text-[1.05em] leading-relaxed">
+      <p>{intro}</p>
+      <ol className="mt-2 space-y-1.5">
+        {steps.map((step, i) => (
+          <li key={step} className="flex gap-2.5">
+            <span className="mt-0.5 grid size-6 shrink-0 place-items-center rounded-full bg-gold-bright font-sans text-[0.75em] font-bold text-primary">{i + 1}</span>
+            <span>{step.replace(/^\d\)\s*/, '').replace(/;\s*$/, '')}</span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  )
+}
+
+/** The lesson's text: inline in the catalog, or — for plan days — fetched when opened. */
+function useLessonContent(lesson: Lesson): { content?: LessonContent; loading: boolean } {
+  const planId = lesson.plan?.id
+  const planDay = lesson.plan?.day ?? 0
+  const key = planId ? `${planId}/${planDay}` : ''
+  const [loaded, setLoaded] = useState<{ key: string; content: LessonContent | null } | null>(null)
+
+  useEffect(() => {
+    if (!planId) return
+    let alive = true
+    loadPlanDay(planId, planDay)
+      .then((content) => alive && setLoaded({ key: `${planId}/${planDay}`, content }))
+      .catch(() => alive && setLoaded({ key: `${planId}/${planDay}`, content: null }))
+    return () => {
+      alive = false
+    }
+  }, [planId, planDay])
+
+  if (!planId) return { content: lesson.content, loading: false }
+  if (loaded?.key !== key) return { loading: true }
+  return { content: loaded.content ?? undefined, loading: false }
+}
+
 function LessonBody({ lesson, scale }: { lesson: Lesson; scale: number }) {
-  const c = lesson.content
+  const { content: c, loading } = useLessonContent(lesson)
+  if (loading) {
+    return (
+      <div aria-busy className="animate-pulse space-y-3 rounded-3xl border border-line bg-surface-2 px-5 py-6">
+        <div className="h-16 rounded-2xl bg-gold-soft/50" />
+        <div className="h-4 rounded bg-line-soft" />
+        <div className="h-4 w-11/12 rounded bg-line-soft" />
+        <div className="h-4 w-4/5 rounded bg-line-soft" />
+      </div>
+    )
+  }
   if (!c) {
     return (
       <div className="rounded-3xl border border-dashed border-line bg-surface-2 px-6 py-8 text-center">
@@ -155,14 +243,14 @@ function LessonBody({ lesson, scale }: { lesson: Lesson; scale: number }) {
     <article className="rounded-3xl border border-line bg-surface-2 px-5 py-6 shadow-card" style={{ fontSize: `${scale}rem` }}>
       {(c.fecha || c.autor || c.periodo) && (
         <div className="grid gap-3.5 border-b border-line-soft pb-5 text-[0.98em]">
-          {c.fecha && <Fact icon="calendar" label="Przybliżony czas" value={c.fecha} />}
+          {c.fecha && <Fact icon="calendar" label="Przybliżona data" value={c.fecha} />}
           {c.autor && <Fact icon="feather" label="Autor" value={c.autor} />}
           {c.periodo && <Fact icon="users" label="Okres i postacie" value={c.periodo} />}
         </div>
       )}
       {c.versiculo && (
         <figure className="my-6 rounded-2xl bg-gold-soft/50 px-5 py-4">
-          <blockquote className="font-serif text-[1.18em] italic leading-relaxed text-ink">„{c.versiculo.texto}”</blockquote>
+          <blockquote className="font-serif text-[1.18em] italic leading-relaxed text-ink">„{c.versiculo.texto.trim().replace(/[;:,]$/, '')}”</blockquote>
           <figcaption className="mt-2 text-[0.85em] font-semibold text-gold">{c.versiculo.referencia}</figcaption>
         </figure>
       )}
@@ -171,6 +259,25 @@ function LessonBody({ lesson, scale }: { lesson: Lesson; scale: number }) {
           {c.resumen.map((paragraph) => (
             <p key={paragraph.slice(0, 40)}>{paragraph}</p>
           ))}
+        </div>
+      )}
+      {c.tarea && (
+        <div className="mt-6 rounded-2xl bg-primary px-5 py-4 text-white">
+          <p className="text-[0.8em] font-semibold uppercase tracking-[0.08em] text-gold-bright">Mini-zadanie na dziś</p>
+          <TaskText text={c.tarea} />
+        </div>
+      )}
+      {c.practica && c.practica.length > 0 && (
+        <div className="mt-4 rounded-2xl border border-line-soft bg-surface p-4">
+          <p className="text-[0.8em] font-semibold uppercase tracking-[0.08em] text-gold">W praktyce</p>
+          <ol className="mt-2 space-y-2">
+            {c.practica.map((step, i) => (
+              <li key={step} className="flex gap-3 leading-relaxed text-ink">
+                <span className="grid size-6 shrink-0 place-items-center rounded-full bg-gold-soft text-[0.8em] font-bold text-ink">{i + 1}</span>
+                {step}
+              </li>
+            ))}
+          </ol>
         </div>
       )}
       {c.meditar && (
@@ -189,19 +296,24 @@ function CompletionCard({
   streak,
   onToggle,
   next,
+  isPlanDay,
+  opensTomorrow,
 }: {
   done: boolean
   celebrate: boolean
   streak: number
   onToggle: () => void
   next: { href: string; title: string } | null
+  isPlanDay: boolean
+  /** Title of the next plan day when it only opens tomorrow. */
+  opensTomorrow: string | null
 }) {
   if (!done) {
     return (
       <div className="mt-6">
         <button type="button" onClick={onToggle} className={buttonClass.primary}>
           <Icon name="check" className="size-5" strokeWidth={2.6} />
-          Oznacz jako przeczytaną
+          {isPlanDay ? 'Ukończ dzień' : 'Oznacz jako przeczytaną'}
           <span className="rounded-full bg-white/15 px-2 py-0.5 text-[13px] font-semibold">+{POINTS.lesson} pkt</span>
         </button>
         <p className="mt-2 text-center text-[14px] text-muted">Zdobywasz punkty i podtrzymujesz swoją serię.</p>
@@ -215,14 +327,14 @@ function CompletionCard({
           <Icon name="check" className="size-6" strokeWidth={2.8} />
         </span>
         <div>
-          <p className="font-serif text-[19px] font-semibold text-ink">Lekcja ukończona</p>
+          <p className="font-serif text-[19px] font-semibold text-ink">{isPlanDay ? 'Dzień ukończony' : 'Lekcja ukończona'}</p>
           <p className="text-[15px] text-text">
             {streak > 0 ? (
               <>
-                Seria: <strong>{plural(streak, 'dzień', 'dni', 'dni')}</strong> z rzędu
+                Seria: <strong>{plural(streak, 'dzień', 'dni', 'dni')}</strong>
               </>
             ) : (
-              'Brawo!'
+              'Świetnie!'
             )}
             {celebrate && ` · +${plural(POINTS.lesson, 'punkt', 'punkty', 'punktów')}`}
           </p>
@@ -234,8 +346,14 @@ function CompletionCard({
           <Icon name="arrowRight" className="size-5 shrink-0 text-gold-bright" />
         </Link>
       )}
+      {opensTomorrow && (
+        <p className="mt-4 flex items-center justify-center gap-2 rounded-2xl bg-surface-2 p-3 text-center text-[15px] text-ink">
+          <Icon name="calendar" className="size-5 shrink-0 text-gold" />
+          {opensTomorrow} otworzy się jutro. Czekamy na ciebie!
+        </p>
+      )}
       <button type="button" onClick={onToggle} className="mt-3 w-full py-1 text-center text-[14px] font-medium text-muted underline underline-offset-4 hover:text-ink">
-        Cofnij oznaczenie lekcji
+        {isPlanDay ? 'Cofnij ukończenie dnia' : 'Cofnij oznaczenie lekcji'}
       </button>
     </div>
   )
@@ -258,7 +376,7 @@ function ReflectionBox({ lessonKey: key, existing }: { lessonKey: string; existi
       <h2 id="reflexion-titulo" className="font-serif text-[22px] font-semibold text-ink">
         Twoja refleksja
       </h2>
-      <p className="mt-1 text-[15.5px] leading-snug text-muted">Co odkrywasz w tym streszczeniu? Co poruszyło twoje serce?</p>
+      <p className="mt-1 text-[15.5px] leading-snug text-muted">Czego nauczyło cię to streszczenie? Co poruszyło twoje serce?</p>
       <form onSubmit={submit} className="mt-3.5 rounded-3xl border border-line bg-surface p-4">
         <label htmlFor="reflexion" className="sr-only">
           Twoja refleksja
@@ -293,7 +411,7 @@ function ReflectionBox({ lessonKey: key, existing }: { lessonKey: string; existi
         </button>
         {saved && !dirty && (
           <p role="status" className="mt-2.5 text-center text-[14.5px] font-medium text-success">
-            {shared ? 'Zapisano i udostępniono braciom i siostrom.' : 'Zapisano tylko dla ciebie.'}
+            {shared ? 'Zapisana i udostępniona braciom i siostrom.' : 'Zapisana tylko dla ciebie.'}
           </p>
         )}
       </form>
@@ -302,7 +420,7 @@ function ReflectionBox({ lessonKey: key, existing }: { lessonKey: string; existi
 }
 
 // Shared reflections and wall posts about this lesson, in one conversation: a post
-// tagged with this lesson on the community wall shows up here too, so the lesson and the
+// tagged "Génesis" on the Comunidad wall shows up here too, so the lesson and the
 // community feed each other instead of living in separate tabs.
 function SharedReflections({
   lessonKey: key,
@@ -331,7 +449,7 @@ function SharedReflections({
       </h2>
       {items.length === 0 ? (
         <p className="mt-3 rounded-2xl border border-dashed border-line px-5 py-6 text-center text-[15.5px] leading-relaxed text-muted">
-          Nikt jeszcze nie podzielił się tu refleksją. Zacznij tę rozmowę.
+          Nikt jeszcze nie podzielił się tu refleksją. Możesz być pierwszą osobą.
         </p>
       ) : (
         <ul className="mt-3.5 space-y-3">

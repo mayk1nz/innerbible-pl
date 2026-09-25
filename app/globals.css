@@ -32,6 +32,35 @@
   --shadow-float: 0 14px 34px -14px rgb(27 45 75 / 0.55);
 }
 
+/* Dark mode (Perfil → Modo oscuro): warm night tones instead of parchment, with the
+   same roles, so every component follows. Text colours keep AA contrast on bg/surface. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --color-bg: #15120d;
+  --color-surface: #211c14;
+  --color-surface-2: #1a160f;
+  --color-surface-hover: #2b2419;
+  --color-line: #3b3223;
+  --color-line-soft: #2d261b;
+
+  --color-ink: #f4ead6;
+  --color-text: #ddd0b7;
+  --color-muted: #a99a7f;
+
+  --color-primary: #2d4b7c;
+  --color-primary-hover: #375a91;
+  --color-gold: #e3b25a;
+  --color-gold-soft: #3d3221;
+  --color-gold-bright: #eabb5c;
+  --color-flame: #f0834a;
+  --color-success: #6cc394;
+  --color-success-soft: #1f3528;
+  --color-danger: #eb8277;
+
+  --shadow-card: 0 1px 0 rgb(0 0 0 / 0.3), 0 8px 20px -14px rgb(0 0 0 / 0.8);
+  --shadow-float: 0 14px 34px -14px rgb(0 0 0 / 0.85);
+}
+
 html {
   background: var(--color-bg);
   -webkit-text-size-adjust: 100%;

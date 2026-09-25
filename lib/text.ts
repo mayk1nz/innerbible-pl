@@ -1,21 +1,22 @@
-/** "Dlaczego Biblia dzieli się…?" → "dlaczego-biblia-dzieli-sie". Stable ids for lessons. */
+/** "¿Por qué la Biblia…?" → "por-que-la-biblia". Stable ids for lessons. */
 export function slugify(input: string): string {
   return input
-    .replace(/ł/g, 'l')
-    .replace(/Ł/g, 'L')
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
+    // "ł" has no decomposed form: "Łukasza" → "lukasza", not "ukasza".
+    .replace(/ł/g, 'l')
+    .replace(/Ł/g, 'L')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
 }
 
-/** Accent- and case-insensitive form for search ("Księga" matches "ksiega"). */
+/** Accent- and case-insensitive form for search ("Génesis" matches "genesis"). */
 export function normalize(input: string): string {
-  return input.replace(/ł/g, 'l').replace(/Ł/g, 'L').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
+  return input.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ł/g, 'l').replace(/Ł/g, 'L').toLowerCase().trim()
 }
 
-/** "kasia.nowak82@gmail.com" → "Kasia". Used until the member sets a name. */
+/** "maria.lopez82@gmail.com" → "Maria". Used until the member sets a name. */
 export function nameFromEmail(email: string): string {
   const local = email.split('@')[0] ?? ''
   const word = local.split(/[._+\-\d]+/).find((w) => w.length > 1) ?? ''
@@ -27,19 +28,16 @@ export function initial(name: string): string {
   return (name.trim().charAt(0) || '?').toUpperCase()
 }
 
-/**
- * Polish plural: 1 dzień · 2–4 dni · 5+ dni (12–14 take the "many" form).
- * `plural(3, 'punkt', 'punkty', 'punktów')` → "3 punkty".
- */
+/** Polish plural: plural(n, 'lekcja', 'lekcje', 'lekcji') → "1 lekcja", "3 lekcje", "5 lekcji", "22 lekcje". */
+export function plural(n: number, one: string, few: string, many: string): string {
+  return `${n} ${pluralWord(n, one, few, many)}`
+}
+
 export function pluralWord(n: number, one: string, few: string, many: string): string {
   if (n === 1) return one
   const d = n % 10
   const dd = n % 100
-  return d >= 2 && d <= 4 && (dd < 12 || dd > 14) ? few : many
-}
-
-export function plural(n: number, one: string, few: string, many: string): string {
-  return `${n} ${pluralWord(n, one, few, many)}`
+  return d >= 2 && d <= 4 && !(dd >= 12 && dd <= 14) ? few : many
 }
 
 export function timeAgo(minutes: number): string {
@@ -51,5 +49,5 @@ export function timeAgo(minutes: number): string {
   if (days === 1) return 'wczoraj'
   if (days < 7) return `${days} dni temu`
   const weeks = Math.floor(days / 7)
-  return weeks === 1 ? 'tydzień temu' : `${plural(weeks, 'tydzień', 'tygodnie', 'tygodni')} temu`
+  return `${weeks} ${pluralWord(weeks, 'tydzień', 'tygodnie', 'tygodni')} temu`
 }

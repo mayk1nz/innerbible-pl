@@ -9,10 +9,10 @@ const MEDALS: Record<number, string> = { 1: '#e0ac4a', 2: '#c9c3b5', 3: '#c98d58
 export function RankItem({ row, mode }: { row: RankRow; mode: RankMode }) {
   const medal = MEDALS[row.rank]
   const value = mode === 'semana' ? `${row.weekPoints} pkt` : plural(row.streak, 'dzień', 'dni', 'dni')
-  const detail = mode === 'semana' ? `Seria: ${plural(row.streak, 'dzień', 'dni', 'dni')} z rzędu` : `${row.weekPoints} pkt w tym tygodniu`
+  const detail = mode === 'semana' ? `Seria: ${plural(row.streak, 'dzień', 'dni', 'dni')}` : `${row.weekPoints} pkt w tym tygodniu`
   return (
     <li
-      className={`flex items-center gap-3 rounded-2xl border px-3.5 py-3 ${row.me ? 'border-primary/40 bg-[#e8ecf3]' : 'border-line bg-surface'}`}
+      className={`flex items-center gap-3 rounded-2xl border px-3.5 py-3 ${row.me ? 'border-primary/40 bg-primary/10' : 'border-line bg-surface'}`}
       aria-current={row.me ? 'true' : undefined}
     >
       <span

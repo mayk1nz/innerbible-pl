@@ -2,13 +2,13 @@ import type { MetadataRoute } from 'next'
 import { APP } from '@/lib/config'
 
 // Makes the members area installable (desktop and phone). start_url is the members
-// home: without a session the app itself sends the visitor to /logowanie.
+// home: without a session the app itself sends the visitor to /login.
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: '/start',
     name: APP.name,
     short_name: APP.name,
-    description: APP.tagline,
+    description: 'Cała historia Biblii — po kolei i we wspólnocie.',
     lang: 'pl',
     start_url: '/start',
     scope: '/',

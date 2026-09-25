@@ -504,7 +504,10 @@ function VideoOffer({ headingRef }: { headingRef: HeadingRef }) {
               </>
             )}
           </p>
-          <p className="font-serif text-[40px] font-bold leading-tight text-ink">{formatUsd(offer.price)}</p>
+          <p className="font-serif text-[40px] font-bold leading-tight text-ink">
+            {formatUsd(offer.price)}
+            <span className="text-[20px] font-semibold text-text">{OFFER.perMonth}</span>
+          </p>
           <button type="button" onClick={buy} className={`${buttonClass.primary} mt-4 min-h-14 text-[17px]`}>
             {OFFER.button}
             <Icon name="arrowRight" className="size-5 shrink-0 text-gold-bright" />
@@ -520,9 +523,9 @@ function VideoOffer({ headingRef }: { headingRef: HeadingRef }) {
           <div className="mx-auto mt-5 max-w-[360px] rounded-2xl bg-primary px-5 py-5 text-white">
             <p className="inline-block rounded-lg bg-gold-bright px-3 py-1 text-[15px] font-bold uppercase tracking-[0.04em] text-ink">{PAYMENT_NOTE.badge}</p>
             <p className="mt-3 text-[15px] font-semibold uppercase leading-snug">
-              {PAYMENT_NOTE.once}: {formatUsd(offer.price)}
+              {PAYMENT_NOTE.plan}: {formatUsd(offer.price)}
+              {OFFER.perMonth}
             </p>
-            <p className="text-[14.5px] font-medium leading-snug text-white/90">{PAYMENT_NOTE.noFees}</p>
             <p className="mt-4 inline-block rounded-lg bg-white/15 px-3 py-1 text-[14.5px] font-bold uppercase">{PAYMENT_NOTE.calm}</p>
             <p className="mt-2 text-[14px] leading-relaxed text-white/90">{PAYMENT_NOTE.convert}</p>
           </div>

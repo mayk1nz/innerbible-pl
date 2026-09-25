@@ -1,5 +1,6 @@
 import type { IconName } from '@/components/icons'
 import { WHATSAPP_URL } from './config'
+import { PLAN_TITLES, type PlanId } from './content/plans/titles'
 import { COMIENZA_AQUI, GENESIS } from './content/sample'
 import { slugify } from './text'
 
@@ -9,8 +10,9 @@ import { slugify } from './text'
 // and reflections work everywhere without special cases.
 //
 // `offer` is what unlocks a product: 'front' is the main purchase, 'upsell1' the audio
-// version, 'upsell2' the Wykonawcy Słowa guide. The bonuses are provisionally on 'front'
-// until the owner decides which offer carries each one — change that one field.
+// version, 'upsell2' the Palabras del Señor guide (formerly "Hacedores de la Palabra",
+// id kept) plus the bonuses its sales page lists. The other 9 bonuses come with
+// 'front' ("+ 9 regalos especiales") — to move one, change that one field.
 
 export type OfferId = 'front' | 'upsell1' | 'upsell2'
 export type ProductKind = 'recorrido' | 'guia' | 'enlace'
@@ -23,19 +25,36 @@ export interface LessonContent {
   versiculo?: { texto: string; referencia: string }
   resumen?: string[]
   meditar?: string
+  /** Plans: the small task of the day. */
+  tarea?: string
+  /** Plans: concrete steps to put the day's reading into practice. */
+  practica?: string[]
 }
 
 export interface Lesson {
   id: string
   title: string
+  /** Plans: the day's name ("Un corazón dispuesto"), shown next to "Día 1". */
+  subtitle?: string
   format: LessonFormat
   audioSrc?: string
+  /** Square cover of an audio lesson (public/audio-covers/<lesson>.webp). */
+  image?: string
   content?: LessonContent
+  /** Plans: the text lives in lib/content/plans and loads only when the day is opened. */
+  plan?: { id: PlanId; day: number }
 }
 
 export interface Section {
   id: string
   title: string
+  /** Label of the section's tab, when the product shows its sections as tabs. */
+  tab?: string
+  /**
+   * A day-by-day plan: one day at a time — the next day opens the day after the
+   * previous one was done (see planDayStatus in lib/progress.ts).
+   */
+  plan?: { goal: string }
   lessons: Lesson[]
 }
 
@@ -59,12 +78,14 @@ export interface Product {
   sections: Section[]
   /** Only for kind 'enlace' (e.g. the WhatsApp group). */
   url?: string
+  /** Show the sections as tabs (e.g. Palabras del Señor: the guide + its plans). */
+  tabs?: boolean
 }
 
 export interface Offer {
   id: OfferId
   title: string
-  /** How the offer is named in a short line: "Zawarte w {short}" (locative case). */
+  /** How the offer is named in a short line: "Incluido en {short}". */
   short: string
   pitch: string
   /** Product whose cover represents the offer in the Tienda. */
@@ -75,7 +96,7 @@ export interface Offer {
 
 const SAMPLE_CONTENT: Record<string, LessonContent> = {
   'zacznij-tutaj': COMIENZA_AQUI,
-  'ksiega-rodzaju': GENESIS,
+  rodzaju: GENESIS,
 }
 
 function lessons(titles: string[], format: LessonFormat): Lesson[] {
@@ -85,13 +106,33 @@ function lessons(titles: string[], format: LessonFormat): Lesson[] {
   })
 }
 
+/**
+ * Audio lessons play from /api/audio/<product>/<lesson>, which checks the purchase and
+ * hands out a short-lived link to the file in Supabase Storage (bucket "audios", file
+ * "<product>/<lesson>.mp3"). A file not uploaded yet shows "Audio en preparación".
+ */
+function audioLessons(productId: string, titles: string[]): Lesson[] {
+  return lessons(titles, 'audio').map((l) => ({ ...l, audioSrc: `/api/audio/${productId}/${l.id}`, image: `/audio-covers/${l.id}.webp` }))
+}
+
 function numberedDays(count: number, format: LessonFormat): Lesson[] {
-  return Array.from({ length: count }, (_, i) => ({ id: `dzien-${i + 1}`, title: `Dzień ${i + 1}`, format }))
+  return Array.from({ length: count }, (_, i) => ({ id: `dia-${i + 1}`, title: `Dzień ${i + 1}`, format }))
+}
+
+/** Days of a plan inside a product with several plans: ids carry the plan, so they never clash. */
+function planDays(planId: PlanId, count: number): Lesson[] {
+  return Array.from({ length: count }, (_, i) => ({
+    id: `${planId}-dia-${i + 1}`,
+    title: `Dzień ${i + 1}`,
+    subtitle: PLAN_TITLES[planId][i],
+    format: 'texto' as const,
+    plan: { id: planId, day: i + 1 },
+  }))
 }
 
 /** Guides whose inner structure is still to be defined: one entry to open them. */
 function pendingGuide(format: LessonFormat = 'texto'): Section[] {
-  return [{ id: 'tresc', title: 'Treść', lessons: lessons(['Zacznij tutaj'], format) }]
+  return [{ id: 'contenido', title: 'Treść', lessons: lessons(['Zacznij tutaj'], format) }]
 }
 
 const MONTHS = ['Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec', 'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień']
@@ -104,38 +145,35 @@ function yearPlan(): Section[] {
     title: month,
     lessons: Array.from({ length: MONTH_DAYS[i] }, () => {
       day += 1
-      return { id: `dzien-${day}`, title: `Dzień ${day}`, format: 'texto' as const }
+      return { id: `dia-${day}`, title: `Dzień ${day}`, format: 'texto' as const }
     }),
   }))
 }
 
 // ─── Chronological order (as listed in the reference app) ──────────
-// Book names as in the Biblia Tysiąclecia.
 
 const INTRO = ['Zacznij tutaj', 'Oś czasu', 'Dlaczego Biblia dzieli się na Stary i Nowy Testament?']
 
+// Book names as in content-src/planes/verify-verses.mjs (the UBG18 reference form),
+// except "Psalmy", which reads better as a title than the reference form "Psalm".
 const OLD_TESTAMENT = [
-  'Księga Rodzaju', 'Księga Hioba', 'Księga Wyjścia', 'Księga Kapłańska', 'Księga Liczb', 'Księga Powtórzonego Prawa',
-  'Księga Jozuego', 'Księga Sędziów', 'Księga Rut', '1 Księga Samuela', '2 Księga Samuela', '1 Księga Kronik',
-  'Księga Psalmów', 'Księga Przysłów', 'Księga Koheleta', 'Pieśń nad Pieśniami', '1 Księga Królewska 1-11',
-  '2 Księga Kronik 1-9', 'Księga Jonasza', 'Księga Amosa', 'Księga Ozeasza', 'Księga Izajasza', 'Księga Micheasza',
-  'Księga Nahuma', 'Księga Sofoniasza', 'Księga Habakuka', 'Księga Jeremiasza', 'Lamentacje', 'Księga Abdiasza',
-  'Księga Ezechiela', 'Księga Daniela', 'Księga Ezdrasza', 'Księga Aggeusza', 'Księga Zachariasza', 'Księga Estery',
-  'Księga Nehemiasza', 'Księga Malachiasza',
+  'Rodzaju', 'Hioba', 'Wyjścia', 'Kapłańska', 'Liczb', 'Powtórzonego Prawa', 'Jozuego', 'Sędziów', 'Rut',
+  '1 Samuela', '2 Samuela', '1 Kronik', 'Psalmy', 'Przysłów', 'Koheleta', 'Pieśń nad Pieśniami',
+  '1 Królewska 1–11', '2 Kronik 1–9', 'Jonasza', 'Amosa', 'Ozeasza', 'Izajasza', 'Micheasza', 'Nahuma', 'Sofoniasza',
+  'Habakuka', 'Jeremiasza', 'Lamentacje', 'Abdiasza', 'Ezechiela', 'Daniela', 'Ezdrasza', 'Aggeusza', 'Zachariasza',
+  'Estery', 'Nehemiasza', 'Malachiasza',
 ]
 
 const NEW_TESTAMENT = [
-  'Ewangelia według św. Łukasza 1-2', 'Ewangelia według św. Mateusza 1-2', 'Ewangelia według św. Marka 1',
-  'Ewangelia według św. Jana 1', 'Działalność Jezusa: harmonia Ewangelii', 'Dzieje Apostolskie', 'List św. Jakuba',
-  'List do Galatów', '1 List do Tesaloniczan', '2 List do Tesaloniczan', '1 List do Koryntian', '2 List do Koryntian',
-  'List do Rzymian', 'List do Efezjan', 'List do Filipian', 'List do Kolosan', 'List do Filemona',
-  '1 List do Tymoteusza', 'List do Tytusa', '2 List do Tymoteusza', '1 List św. Piotra', '2 List św. Piotra',
-  'List do Hebrajczyków', 'List św. Judy', '1 List św. Jana', '2 List św. Jana', '3 List św. Jana', 'Apokalipsa św. Jana',
+  'Łukasza 1–2', 'Mateusza 1–2', 'Marka 1', 'Jana 1', 'Działalność Jezusa: harmonia Ewangelii',
+  'Dzieje Apostolskie', 'Jakuba', 'Galacjan', '1 Tesaloniczan', '2 Tesaloniczan', '1 Koryntian',
+  '2 Koryntian', 'Rzymian', 'Efezjan', 'Filipian', 'Kolosan', 'Filemona', '1 Tymoteusza', 'Tytusa',
+  '2 Tymoteusza', '1 Piotra', '2 Piotra', 'Hebrajczyków', 'Judy', '1 Jana', '2 Jana', '3 Jana', 'Objawienie',
 ]
 
 const COMMANDMENTS = [
-  'Nie będziesz miał bogów cudzych', 'Nie będziesz czynił sobie podobizny', 'Nie będziesz brał imienia Pana Boga nadaremno',
-  'Pamiętaj o dniu świętym', 'Czcij ojca swego i matkę swoją', 'Nie zabijaj', 'Nie cudzołóż',
+  'Nie będziesz miał innych bogów', 'Nie czyń sobie rzeźbionego posągu', 'Nie bierz imienia Boga nadaremnie',
+  'Pamiętaj, aby dzień święty święcić', 'Czcij ojca swego i matkę swoją', 'Nie zabijaj', 'Nie cudzołóż',
   'Nie kradnij', 'Nie mów fałszywego świadectwa', 'Nie pożądaj',
 ]
 
@@ -153,7 +191,7 @@ export const PRODUCTS: Product[] = [
     id: 'cronologico',
     title: 'Chronologiczne Streszczenie Biblii',
     short: '66 ksiąg w kolejności, w jakiej działy się wydarzenia — przejrzyście i prosto.',
-    description: 'Przejdź przez całą historię biblijną w porządku chronologicznym, od stworzenia świata aż po obietnicę nowego nieba i nowej ziemi. Każde streszczenie zawiera przybliżoną datę, autora, postacie, kluczowy werset oraz jasne i wierne tekstowi wyjaśnienie.',
+    description: 'Przejdź przez całą historię biblijną w porządku chronologicznym, od stworzenia aż po obietnicę nowego nieba i nowej ziemi. Każde streszczenie podaje przybliżoną datę, autora, postacie, kluczowy werset oraz jasne i wierne tekstowi wyjaśnienie.',
     kind: 'recorrido',
     offer: 'front',
     cover: { ...WARM, lines: ['Chronologiczne', 'Streszczenie'], highlight: 'Biblii', icon: 'book' },
@@ -165,73 +203,88 @@ export const PRODUCTS: Product[] = [
   },
   {
     id: 'cronologico-audio',
-    title: 'Chronologiczne Streszczenie w Audio',
+    title: 'Chronologiczne Streszczenie Biblii w audio',
     short: 'Cała historia biblijna opowiedziana po kolei — do słuchania na spacerze, w drodze albo w chwili odpoczynku.',
-    description: 'Ta sama historia, w wersji audio. Każda księga czytana w porządku chronologicznym, z regulacją prędkości i zapamiętanym miejscem, abyś mógł kontynuować dokładnie tam, gdzie skończyłeś.',
+    description: 'Ta sama historia w wersji audio. Każda księga opowiedziana w porządku chronologicznym, z regulowaną prędkością. Aplikacja pamięta, gdzie skończyło się słuchanie, więc zawsze wracasz dokładnie do tego miejsca.',
     kind: 'recorrido',
     offer: 'upsell1',
-    cover: { ...AMBER, lines: ['Chronologiczne', 'Streszczenie', 'w'], highlight: 'Audio', icon: 'headphones' },
+    cover: { ...AMBER, lines: ['Chronologiczne', 'Streszczenie', 'w wersji'], highlight: 'Audio', icon: 'headphones' },
     sections: [
-      { id: 'introduccion', title: 'Wprowadzenie', lessons: lessons(['Zacznij tutaj', 'Dlaczego Biblia dzieli się na Stary i Nowy Testament?'], 'audio') },
-      { id: 'antiguo-testamento', title: 'Stary Testament', lessons: lessons(OLD_TESTAMENT, 'audio') },
-      { id: 'nuevo-testamento', title: 'Nowy Testament', lessons: lessons(NEW_TESTAMENT, 'audio') },
+      { id: 'introduccion', title: 'Wprowadzenie', lessons: audioLessons('cronologico-audio', ['Zacznij tutaj', 'Dlaczego Biblia dzieli się na Stary i Nowy Testament?']) },
+      { id: 'antiguo-testamento', title: 'Stary Testament', lessons: audioLessons('cronologico-audio', OLD_TESTAMENT) },
+      { id: 'nuevo-testamento', title: 'Nowy Testament', lessons: audioLessons('cronologico-audio', NEW_TESTAMENT) },
+      { id: 'conclusion', title: 'Zakończenie', lessons: audioLessons('cronologico-audio', ['Zakończenie: od Księgi Rodzaju do Objawienia']) },
     ],
   },
   {
     id: 'hacedores',
-    title: 'Przewodnik „Wykonawcy Słowa”',
-    short: 'Ponad 100 prawdziwych sytuacji z życia i biblijna odpowiedź zastosowana krok po kroku.',
-    description: 'To nie jest teoretyczna książka ani kolejne ogólne rozważanie. To praktyczny przewodnik: przy każdej prawdziwej sytuacji z życia — co mówi Biblia i jak to zastosować, krok po kroku.',
+    title: 'Słowa Pana',
+    short: 'Praktyczny przewodnik i trzy 90-dniowe plany, by żyć Słowem dzień po dniu.',
+    description: 'To nie jest teoretyczna książka ani kolejne ogólne rozważania. To praktyczny przewodnik: przy każdej prawdziwej sytuacji życiowej pokazuje, co mówi Biblia i jak zastosować to krok po kroku. Do tego trzy 90-dniowe plany — z czytaniem, mini-zadaniem i praktycznymi krokami na każdy dzień.',
     kind: 'recorrido',
     offer: 'upsell2',
-    cover: { ...DAWN, lines: ['Przewodnik', 'Wykonawcy'], highlight: 'Słowa', icon: 'feather' },
-    sections: pendingGuide(),
+    cover: { ...DAWN, lines: ['Słowa'], highlight: 'Pana', icon: 'feather' },
+    tabs: true,
+    sections: [
+      { id: 'guia', title: 'Przewodnik „Słowa Pana”', tab: 'Przewodnik', lessons: lessons(['Jak korzystać z tego przewodnika'], 'texto') },
+      {
+        id: 'transformacion',
+        title: '90-dniowy plan Duchowej Przemiany',
+        tab: 'Przemiana',
+        plan: { goal: 'Odnów swoją relację z Bogiem — każdego dnia jeden krok.' },
+        lessons: planDays('transformacion', 90),
+      },
+      {
+        id: 'vivir-como-jesus',
+        title: '90-dniowy plan: jak żyć według nauki Jezusa',
+        tab: 'Żyć jak Jezus',
+        plan: { goal: 'Wnoś Jego nauczanie w swoją codzienność, krok po kroku.' },
+        lessons: planDays('vivir-como-jesus', 90),
+      },
+      {
+        id: 'nueva-mentalidad',
+        title: '90-dniowy plan: zmień sposób myślenia i stań się prawdziwym chrześcijaninem',
+        tab: 'Nowe myślenie',
+        plan: { goal: 'Odnów swój sposób myślenia w świetle Słowa.' },
+        lessons: planDays('nueva-mentalidad', 90),
+      },
+    ],
   },
   {
     id: 'plan-escucha',
-    title: 'Plan Słuchania · 30 dni',
+    title: 'Plan słuchania · 30 dni',
     short: 'Jedno nagranie dziennie przez miesiąc.',
-    description: 'Trzydzieści dni, by wytrwale słuchać Słowa — jeden krok każdego dnia.',
+    description: 'Trzydzieści dni, by wytrwale słuchać Słowa — każdego dnia jeden krok.',
     kind: 'guia',
     offer: 'front',
-    cover: { ...AMBER, lines: ['Plan', 'Słuchania'], highlight: '30 dni', icon: 'headphones' },
-    sections: [{ id: 'dias', title: '30 dni', lessons: numberedDays(30, 'audio') }],
-  },
-  {
-    id: 'plan-transformacion',
-    title: '30-dniowy Plan Duchowej Przemiany',
-    short: 'Trzydzieści dni, by odnowić twoje życie modlitwy.',
-    description: 'Trzydziestodniowa droga, jeden krok dziennie, by odnowić twoją relację z Bogiem.',
-    kind: 'guia',
-    offer: 'front',
-    cover: { ...DUSK, lines: ['Plan', 'Przemiany'], highlight: '30 dni', icon: 'sparkles' },
-    sections: [{ id: 'dias', title: '30 dni', lessons: numberedDays(30, 'texto') }],
+    cover: { ...AMBER, lines: ['Plan', 'słuchania'], highlight: '30 dni', icon: 'headphones' },
+    sections: [{ id: 'dias', title: '30 dni', lessons: numberedDays(30, 'audio').map((l) => ({ ...l, audioSrc: `/api/audio/plan-escucha/${l.id}` })) }],
   },
   {
     id: 'caminando-gigantes',
-    title: 'Biblioteka „Wędrując z Olbrzymami”',
+    title: 'Biblioteka „Kroczyć z olbrzymami”',
     short: 'Wielcy mężczyźni i kobiety wiary.',
-    description: 'Biblioteka opowieści o życiu tych, którzy szli z Bogiem przed nami.',
+    description: 'Biblioteka życiorysów tych, którzy kroczyli z Bogiem przed nami.',
     kind: 'guia',
-    offer: 'front',
-    cover: { ...OLIVE, lines: ['Wędrując', 'z'], highlight: 'Olbrzymami', icon: 'users' },
+    offer: 'upsell2',
+    cover: { ...OLIVE, lines: ['Kroczyć', 'z'], highlight: 'Olbrzymami', icon: 'users' },
     sections: pendingGuide(),
   },
   {
     id: 'mapas-mentales',
-    title: 'Mapy Myśli Biblii',
+    title: 'Biblijne mapy myśli',
     short: 'Każda księga na jednym obrazie.',
     description: 'Wizualne mapy, dzięki którym zrozumiesz i zapamiętasz każdą księgę jednym spojrzeniem.',
     kind: 'guia',
     offer: 'front',
-    cover: { ...DAWN, lines: ['Myśli'], highlight: 'Mapy', icon: 'map' },
+    cover: { ...DAWN, lines: ['Mapy'], highlight: 'Myśli', icon: 'map' },
     sections: pendingGuide(),
   },
   {
     id: 'biografias',
-    title: 'Biografie Apostołów i Postaci Biblijnych',
-    short: 'Kim byli i czego uczą nas dzisiaj.',
-    description: 'Życie apostołów i najważniejszych postaci Biblii.',
+    title: 'Biografie apostołów i postaci biblijnych',
+    short: 'Kim byli i czego uczą nas dziś.',
+    description: 'Życie apostołów i kluczowych postaci Biblii.',
     kind: 'guia',
     offer: 'front',
     cover: { ...WARM, lines: ['Apostołowie', 'i postacie'], highlight: 'Biografie', icon: 'user' },
@@ -239,19 +292,19 @@ export const PRODUCTS: Product[] = [
   },
   {
     id: 'mandamientos',
-    title: '10 Przykazań z Wyjaśnieniem',
-    short: 'Każde przykazanie, jego sens i to, jak żyć nim dzisiaj.',
-    description: 'Dziesięć Przykazań, jedno po drugim, wyjaśnione w świetle całego Pisma Świętego.',
+    title: '10 przykazań z objaśnieniem',
+    short: 'Każde przykazanie: jego sens i jak żyć nim dziś.',
+    description: 'Dziesięć przykazań, jedno po drugim, objaśnione w świetle całego Pisma.',
     kind: 'guia',
     offer: 'front',
-    cover: { ...OLIVE, lines: ['Przykazań', 'z wyjaśnieniem'], highlight: '10', icon: 'star' },
-    sections: [{ id: 'mandamientos', title: 'Dziesięć Przykazań', lessons: lessons(COMMANDMENTS, 'texto') }],
+    cover: { ...OLIVE, lines: ['Przykazań', 'z objaśnieniem'], highlight: '10', icon: 'star' },
+    sections: [{ id: 'mandamientos', title: 'Dziesięć przykazań', lessons: lessons(COMMANDMENTS, 'texto') }],
   },
   {
     id: 'plan-365',
-    title: 'Plan Czytania Biblii w 365 dni',
+    title: 'Plan czytania Biblii w 365 dni',
     short: 'Cała Biblia w rok, jeden fragment dziennie.',
-    description: 'Przeczytaj całą Biblię w ciągu roku, z codziennym fragmentem, uporządkowanym według miesięcy.',
+    description: 'Przeczytaj całą Biblię w ciągu roku — codziennie jeden fragment, ułożony według miesięcy.',
     kind: 'guia',
     offer: 'front',
     cover: { ...WARM, lines: ['Plan', 'czytania'], highlight: '365', icon: 'calendar' },
@@ -259,17 +312,17 @@ export const PRODUCTS: Product[] = [
   },
   {
     id: 'mujeres-virtuosas',
-    title: 'Niewiasty Dzielne w Biblii',
+    title: 'Cnotliwe kobiety Biblii',
     short: 'Kobiety wiary i to, czego uczy nas ich historia.',
     description: 'Kobiety Biblii, które zapisały się w historii wiary.',
     kind: 'guia',
     offer: 'front',
-    cover: { ...ROSE, lines: ['Dzielne', 'w Biblii'], highlight: 'Niewiasty', icon: 'heart' },
+    cover: { ...ROSE, lines: ['Cnotliwe'], highlight: 'Kobiety', icon: 'heart' },
     sections: pendingGuide(),
   },
   {
     id: 'milagros-jesus',
-    title: '43 Cuda Jezusa',
+    title: '43 cuda Jezusa',
     short: 'Każdy cud i to, co objawia o Nim.',
     description: 'Cuda Jezusa opisane w Ewangeliach i to, co każdy z nich mówi nam o Nim.',
     kind: 'guia',
@@ -279,19 +332,19 @@ export const PRODUCTS: Product[] = [
   },
   {
     id: 'actividades-ninos',
-    title: 'Biblijne Zabawy dla Dzieci',
-    short: 'Aby poznawać Biblię całą rodziną.',
-    description: 'Zabawy i zadania, dzięki którym najmłodsi poznają historie biblijne przez zabawę.',
+    title: 'Biblijne zajęcia dla dzieci',
+    short: 'Do wspólnego poznawania Biblii w rodzinie.',
+    description: 'Zajęcia, dzięki którym najmłodsi poznają biblijne historie przez zabawę.',
     kind: 'guia',
     offer: 'front',
-    cover: { ...OLIVE, lines: ['Biblijne', 'zabawy'], highlight: 'Dzieci', icon: 'gift' },
+    cover: { ...OLIVE, lines: ['Biblijne', 'zajęcia dla'], highlight: 'Dzieci', icon: 'gift' },
     sections: pendingGuide(),
   },
   {
     id: 'comunidad-whatsapp',
     title: 'Wspólnota na WhatsAppie',
     short: 'Modlitwa i studium razem z braćmi i siostrami.',
-    description: 'Dołącz do grupy na WhatsAppie, by modlić się, dzielić i studiować razem z braćmi i siostrami.',
+    description: 'Dołącz do grupy na WhatsAppie, by modlić się, dzielić i studiować Słowo razem z braćmi i siostrami.',
     kind: 'enlace',
     offer: 'front',
     cover: { ...DAWN, lines: ['na WhatsAppie'], highlight: 'Wspólnota', icon: 'message' },
@@ -304,22 +357,22 @@ export const OFFERS: Offer[] = [
   {
     id: 'front',
     title: 'Chronologiczne Streszczenie Biblii',
-    short: 'twoim zakupie',
-    pitch: '66 ksiąg w porządku chronologicznym i wszystkie bonusy.',
+    short: 'twój zakup',
+    pitch: '66 ksiąg w porządku chronologicznym i 9 prezentów.',
     productId: 'cronologico',
   },
   {
     id: 'upsell1',
-    title: 'Chronologiczne Streszczenie w Audio',
-    short: 'pakiecie Audio Premium',
+    title: 'Chronologiczne Streszczenie Biblii w audio',
+    short: 'Audio Premium',
     pitch: 'Słuchaj całej historii biblijnej po kolei — na spacerze, w drodze albo w chwili odpoczynku.',
     productId: 'cronologico-audio',
   },
   {
     id: 'upsell2',
-    title: 'Przewodnik „Wykonawcy Słowa”',
-    short: 'pakiecie „Wykonawcy Słowa”',
-    pitch: 'Ponad 100 prawdziwych sytuacji z życia i biblijna odpowiedź zastosowana krok po kroku.',
+    title: 'Słowa Pana',
+    short: 'Słowa Pana',
+    pitch: 'Twój Doradca Biblijny do codziennej rozmowy, trzy 90-dniowe plany i praktyczny przewodnik, by żyć Słowem.',
     productId: 'hacedores',
   },
 ]

@@ -5,15 +5,17 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Icon } from '../icons'
 import { BrandMark, buttonClass } from '../ui'
 import { APP, DEMO_MODE } from '@/lib/config'
-import { signIn, useAppState, useHydrated } from '@/lib/store'
+import { setMember, useAppState, useHydrated, type ServerMember } from '@/lib/store'
 import { nameFromEmail } from '@/lib/text'
 
 // Two steps: the purchase email, then a 6-digit code sent to it. The reference app
 // lets anyone in who types a buyer's email; the code closes that door and stops
 // shared logins, at the cost of one extra step.
 //
-// Mock for now: any 6 digits are accepted. The backend will send and verify the code
-// and refuse emails without a purchase.
+// For now the code step is OFF: no e-mail with a code is sent yet, so asking for one
+// would leave real buyers waiting for a message that never arrives. The backend will
+// send and verify the code (turn SEND_CODE on) and refuse e-mails without a purchase.
+const SEND_CODE = false
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 
@@ -25,21 +27,46 @@ export function LoginForm() {
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     if (hydrated && session) router.replace('/start')
   }, [hydrated, session, router])
 
-  const submitEmail = (e: FormEvent) => {
+  const submitEmail = async (e: FormEvent) => {
     e.preventDefault()
+    if (busy) return
     const clean = email.trim().toLowerCase()
     if (!EMAIL_RE.test(clean)) {
-      setError('Sprawdź adres e-mail — wygląda na niepełny.')
+      setError('Sprawdź swój e-mail: wygląda na niepełny.')
       return
     }
     setEmail(clean)
     setError(null)
-    setStep('code')
+    if (SEND_CODE) {
+      setStep('code')
+      return
+    }
+    setBusy(true)
+    try {
+      const name = nameFromEmail(clean)
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: clean, name }),
+      })
+      if (res.status === 403) {
+        setError('Nie znaleźliśmy zakupu na ten adres e-mail. Użyj tego samego adresu, którego użyto przy zakupie, albo napisz do nas, a chętnie pomożemy.')
+        return
+      }
+      if (!res.ok) throw new Error(String(res.status))
+      setMember(clean, name, (await res.json()) as ServerMember)
+      router.replace('/start')
+    } catch {
+      setError('Nie udało się połączyć. Sprawdź internet i spróbuj ponownie.')
+    } finally {
+      setBusy(false)
+    }
   }
 
   const submitCode = (e: FormEvent) => {
@@ -48,7 +75,8 @@ export function LoginForm() {
       setError('Kod ma 6 cyfr.')
       return
     }
-    signIn(email, nameFromEmail(email))
+    // TODO(SEND_CODE): verify the code on the server (it would return the owned offers).
+    setMember(email, nameFromEmail(email), { owned: ['front'] })
     router.replace('/start')
   }
 
@@ -62,7 +90,7 @@ export function LoginForm() {
           <BrandMark size="lg" />
           <h1 className="mt-5 font-serif text-[28px] font-semibold leading-tight text-ink">{APP.name}</h1>
           <p className="mt-1.5 text-[16px] leading-snug text-muted">
-            {step === 'email' ? 'Zaloguj się adresem e-mail podanym przy zakupie' : 'Sprawdź swoją skrzynkę'}
+            {step === 'email' ? 'Zaloguj się adresem e-mail użytym przy zakupie' : 'Sprawdź swoją skrzynkę'}
           </p>
         </div>
 
@@ -84,7 +112,7 @@ export function LoginForm() {
                   setEmail(e.target.value)
                   setError(null)
                 }}
-                placeholder="ty@przyklad.pl"
+                placeholder="twoj@email.pl"
                 className={inputClass}
                 aria-invalid={Boolean(error)}
                 aria-describedby={error ? 'login-error' : 'login-help'}
@@ -95,11 +123,11 @@ export function LoginForm() {
                 {error}
               </p>
             )}
-            <button type="submit" className={`${buttonClass.primary} mt-4`}>
-              Kontynuuj
+            <button type="submit" disabled={busy} aria-busy={busy} className={`${buttonClass.primary} mt-4`}>
+              {busy ? 'Logowanie…' : 'Dalej'}
             </button>
             <p id="login-help" className="mt-4 text-center text-[14.5px] leading-relaxed text-muted">
-              Użyj tego samego adresu e-mail, który podano przy zakupie. Wyślemy na niego kod do logowania.
+              Użyj tego samego adresu e-mail, którego użyto przy zakupie.{SEND_CODE && ' Wyślemy ci kod do logowania.'}
             </p>
           </form>
         ) : (
@@ -144,7 +172,7 @@ export function LoginForm() {
               }}
               className={`${buttonClass.ghost} mt-2`}
             >
-              Użyj innego adresu e-mail
+              Użyj innego adresu
             </button>
             {DEMO_MODE && (
               <p className="mt-3 rounded-xl bg-gold-soft/60 px-3 py-2 text-center text-[13.5px] text-ink">
@@ -155,7 +183,7 @@ export function LoginForm() {
         )}
 
         <p className="mt-6 border-t border-line-soft pt-5 text-center text-[14px] text-muted">
-          Problem z logowaniem?{' '}
+          Masz problem z logowaniem?{' '}
           <a href={`mailto:${APP.supportEmail}`} className="font-semibold text-primary underline-offset-4 hover:underline">
             Napisz do nas
           </a>

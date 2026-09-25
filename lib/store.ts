@@ -56,6 +56,11 @@ export interface AppState {
   lastLesson: string | null
   fontScale: number
   audioPos: Record<string, number>
+  theme: 'light' | 'dark'
+  /** The member is on the annual plan (from the server). */
+  annual: boolean
+  /** Start of the member's 15 days of 50% off (from the server). */
+  offerStartedAt: string | null
 }
 
 export const DEFAULT_STATE: AppState = {
@@ -71,9 +76,12 @@ export const DEFAULT_STATE: AppState = {
   lastLesson: null,
   fontScale: 1,
   audioPos: {},
+  theme: 'light',
+  annual: false,
+  offerStartedAt: null,
 }
 
-const STORAGE_KEY = 'ib-pl-state-v1'
+import { STORAGE_KEY } from './storage-key'
 const OFFER_IDS: readonly OfferId[] = ['front', 'upsell1', 'upsell2']
 export const FONT_SCALE_MIN = 0.9
 export const FONT_SCALE_MAX = 1.4
@@ -95,6 +103,7 @@ function sanitize(raw: unknown): AppState {
   return {
     v: 1,
     session,
+    // Only a cache: AppShell refreshes it from the server (/api/auth/me) on every visit.
     owned: Array.isArray(raw.owned) ? raw.owned.filter((o): o is OfferId => OFFER_IDS.includes(o as OfferId)) : [],
     completed: isRecord(raw.completed) ? (raw.completed as AppState['completed']) : {},
     reflections: isRecord(raw.reflections) ? (raw.reflections as AppState['reflections']) : {},
@@ -105,6 +114,9 @@ function sanitize(raw: unknown): AppState {
     lastLesson: typeof raw.lastLesson === 'string' ? raw.lastLesson : null,
     fontScale: typeof raw.fontScale === 'number' ? clampScale(raw.fontScale) : 1,
     audioPos: isRecord(raw.audioPos) ? (raw.audioPos as AppState['audioPos']) : {},
+    theme: raw.theme === 'dark' ? 'dark' : 'light',
+    annual: raw.annual === true,
+    offerStartedAt: typeof raw.offerStartedAt === 'string' ? raw.offerStartedAt : null,
   }
 }
 
@@ -206,17 +218,46 @@ function withoutPoint(points: PointEvent[], id: string): PointEvent[] {
   return points.some((p) => p.id === id) ? points.filter((p) => p.id !== id) : points
 }
 
-/** Mock login: the backend will verify the email code and read the purchases instead. */
-export function signIn(email: string, name: string): void {
-  update((s) => ({
-    ...s,
-    session: { email, name },
-    owned: s.owned.length > 0 ? s.owned : ['front'],
-  }))
+/**
+ * The member as the server knows them (after /api/auth/login or /api/auth/me): the
+ * offers come from the purchases, never from this device. Progress on this device is
+ * kept; if another e-mail signs in here, it starts from scratch.
+ */
+export interface ServerMember {
+  owned: OfferId[]
+  name?: string
+  annual?: boolean
+  offerStartedAt?: string | null
+}
+
+export function setMember(email: string, fallbackName: string, me: ServerMember): void {
+  update((s) => {
+    const same = s.session?.email === email
+    const base = same ? s : { ...DEFAULT_STATE, fontScale: s.fontScale, theme: s.theme }
+    // A name saved on the server (edited in the profile) wins over the one guessed from the e-mail.
+    const finalName = me.name || (same ? s.session?.name : '') || fallbackName
+    return {
+      ...base,
+      session: { email, name: finalName },
+      owned: me.owned.filter((o) => OFFER_IDS.includes(o)),
+      annual: me.annual === true,
+      offerStartedAt: me.offerStartedAt ?? base.offerStartedAt,
+    }
+  })
+}
+
+export function setName(name: string): void {
+  update((s) => (s.session ? { ...s, session: { ...s.session, name } } : s))
+}
+
+export function setTheme(theme: 'light' | 'dark'): void {
+  update((s) => (s.theme === theme ? s : { ...s, theme }))
 }
 
 export function signOut(): void {
   update((s) => ({ ...s, session: null }))
+  // Also end the server session (the cookie); if offline, the next /me check does it.
+  void fetch('/api/auth/me', { method: 'DELETE' }).catch(() => {})
 }
 
 export function completeLesson(key: string): void {
@@ -288,7 +329,7 @@ export function addComment(postId: string, text: string): void {
   const clean = text.trim().slice(0, 800)
   if (!clean) return
   update((s) => {
-    const author = s.session?.name ?? 'Ty'
+    const author = s.session?.name ?? 'Tú'
     const comment: PostComment = { id: uid('c'), author, text: clean, at: Date.now() }
     return { ...s, comments: { ...s.comments, [postId]: [...(s.comments[postId] ?? []), comment] } }
   })
@@ -316,5 +357,5 @@ export function setOfferOwned(offer: OfferId, owned: boolean): void {
 }
 
 export function resetProgress(): void {
-  update((s) => ({ ...DEFAULT_STATE, session: s.session, owned: s.owned, fontScale: s.fontScale }))
+  update((s) => ({ ...DEFAULT_STATE, session: s.session, owned: s.owned, fontScale: s.fontScale, theme: s.theme, annual: s.annual }))
 }

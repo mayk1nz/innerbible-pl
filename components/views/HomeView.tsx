@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useMemo } from 'react'
-import { ProductHeroCard } from '../cards'
+import { ProductHeroCard, ProductTile } from '../cards'
 import { Cover } from '../Cover'
 import { Icon, type IconName } from '../icons'
 import { RankItem } from '../Leaderboard'
@@ -12,10 +12,10 @@ import { OFFERS, PRODUCTS, productById, type Lesson, type Product } from '@/lib/
 import { computeStats, leaderboard, type Stats } from '@/lib/gamification'
 import { continueTarget, isOwned, lessonHref } from '@/lib/progress'
 import { useAppState, useNowMinute, useToday } from '@/lib/store'
-import { plural } from '@/lib/text'
+import { plural, pluralWord } from '@/lib/text'
 
 // Home answers one question — "what do I do today?" — before anything else. The
-// reference app opens on a copy of the library; here the library lives in Czytaj.
+// reference app opens on a copy of the library; here the library lives in Leer.
 
 function greeting(minute: number): string {
   if (!minute) return 'Witaj'
@@ -28,7 +28,7 @@ function StatsStrip({ stats }: { stats: Stats }) {
   const items: { icon: IconName; value: number; unit: string; label: string; hot?: boolean }[] = [
     { icon: 'flame', value: stats.streak, unit: stats.streak === 1 ? 'dzień' : 'dni', label: 'Seria', hot: stats.streak > 0 },
     { icon: 'star', value: stats.weekPoints, unit: 'pkt', label: 'W tym tygodniu' },
-    { icon: 'check', value: stats.lessonsDone, unit: '', label: 'Lekcje' },
+    { icon: 'check', value: stats.lessonsDone, unit: '', label: pluralWord(stats.lessonsDone, 'Lekcja', 'Lekcje', 'Lekcji') },
   ]
   return (
     <div className="grid grid-cols-3 gap-2.5">
@@ -76,13 +76,27 @@ function TodayCard({ stats, target }: { stats: Stats; target: { product: Product
       <p className="mt-1.5 font-serif text-[23px] font-semibold leading-snug">{target.lesson.title}</p>
       <p className="mt-1 text-[15px] text-white/80">
         {target.product.title}
-        {stats.streak > 0 ? ` · nie przerywaj serii: ${plural(stats.streak, 'dzień', 'dni', 'dni')} z rzędu` : ' · zacznij swoją serię już dziś'}
+        {stats.streak > 0 ? ` · podtrzymaj serię: ${plural(stats.streak, 'dzień', 'dni', 'dni')}` : ' · zacznij swoją serię już dziś'}
       </p>
       <span className="mt-4 inline-flex items-center gap-2 rounded-full bg-gold-bright px-5 py-2.5 text-[15px] font-semibold text-primary">
         <Icon name={audio ? 'headphones' : 'book'} className="size-5" />
         {audio ? 'Słuchaj teraz' : 'Czytaj teraz'}
       </span>
     </Link>
+  )
+}
+
+/** A horizontal row of covers that scrolls sideways (swipe on the phone). */
+function Shelf({ products }: { products: Product[] }) {
+  const s = useAppState()
+  return (
+    <div className="-mx-5 flex snap-x snap-mandatory scroll-px-5 gap-3 overflow-x-auto px-5 pb-2 [scrollbar-width:none]">
+      {products.map((p) => (
+        <div key={p.id} className="flex w-[42%] max-w-[180px] shrink-0 snap-start">
+          <ProductTile product={p} state={s} />
+        </div>
+      ))}
+    </div>
   )
 }
 
@@ -99,20 +113,61 @@ export function HomeView() {
   )
   const me = board.find((r) => r.me)
   const recorridos = PRODUCTS.filter((p) => p.kind === 'recorrido' && isOwned(p, s.owned))
+  // One big card — the recorrido in progress — and the rest as small covers, so Home
+  // stays short however much the member owns.
+  const hero = recorridos.find((p) => p.id === target?.product.id) ?? recorridos[0]
+  const otherRecorridos = recorridos.filter((p) => p !== hero)
+  const guides = PRODUCTS.filter((p) => p.kind !== 'recorrido' && isOwned(p, s.owned))
   const pending = OFFERS.filter((o) => o.id !== 'front' && !s.owned.includes(o.id))
 
   return (
     <>
-      <PageHeader title={`${greeting(minute)}, ${name}`} subtitle="Jeden krok każdego dnia. Dobrze, że tu jesteś." />
+      <PageHeader title={`${greeting(minute)}, ${name}`} subtitle="Jeden krok każdego dnia. Dobrze, że jesteś." />
       <StatsStrip stats={stats} />
       <TodayCard stats={stats} target={target} />
 
-      <SectionTitle>Twoje ścieżki</SectionTitle>
-      <div className="space-y-5">
-        {recorridos.map((p) => (
-          <ProductHeroCard key={p.id} product={p} completed={s.completed} />
-        ))}
-      </div>
+      <Link
+        href="/doradca"
+        className="mt-3 flex items-center gap-3.5 rounded-3xl border border-line bg-surface p-4 shadow-card transition hover:bg-surface-hover"
+      >
+        <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-primary text-gold-bright">
+          <Icon name="chatCross" className="size-6" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block font-serif text-[17px] font-semibold leading-snug text-ink">Co dziś masz na sercu?</span>
+          <span className="mt-0.5 block text-[14px] leading-snug text-muted">Opowiedz o tym swojemu Doradcy Biblijnemu i znajdź światło w Słowie.</span>
+        </span>
+        <Icon name="chevronRight" className="size-5 shrink-0 text-muted" />
+      </Link>
+
+      {hero && (
+        <>
+          <SectionTitle>{otherRecorridos.length ? 'Twoja obecna ścieżka' : 'Twoja ścieżka'}</SectionTitle>
+          <ProductHeroCard product={hero} completed={s.completed} />
+        </>
+      )}
+
+      {otherRecorridos.length > 0 && (
+        <>
+          <SectionTitle>Twoje pozostałe ścieżki</SectionTitle>
+          <Shelf products={otherRecorridos} />
+        </>
+      )}
+
+      {guides.length > 0 && (
+        <>
+          <SectionTitle
+            action={
+              <Link href="/czytaj?tab=guias" className="text-[15px] font-semibold text-primary underline-offset-4 hover:underline">
+                Zobacz wszystkie
+              </Link>
+            }
+          >
+            Twoje przewodniki i prezenty
+          </SectionTitle>
+          <Shelf products={guides} />
+        </>
+      )}
 
       {pending.length > 0 && (
         <>
@@ -145,7 +200,7 @@ export function HomeView() {
           </Link>
         }
       >
-        Wytrwali w tym tygodniu
+        Wytrwałość w tym tygodniu
       </SectionTitle>
       <ol className="space-y-2">
         {board.slice(0, 3).map((row) => (
@@ -154,7 +209,7 @@ export function HomeView() {
       </ol>
       {me && me.rank > 3 && (
         <p className="mt-3 text-center text-[15px] text-muted">
-          Jesteś na <strong className="text-ink">{me.rank}.</strong> miejscu ({me.weekPoints} pkt). Każda lekcja się liczy.
+          Jesteś na <strong className="text-ink">{me.rank}.</strong> miejscu z wynikiem {me.weekPoints} pkt. Każda lekcja się liczy.
         </p>
       )}
     </>

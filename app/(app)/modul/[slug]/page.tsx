@@ -7,7 +7,7 @@ type Props = { params: Promise<{ slug: string }> }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params
-  return { title: productById(slug)?.title ?? 'Treści' }
+  return { title: productById(slug)?.title ?? 'Materiały' }
 }
 
 export default async function Page({ params }: Props) {

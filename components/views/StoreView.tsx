@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { OfferCard } from '../cards'
+import { AnualCard } from './AnualView'
 import { PageHeader } from '../PageHeader'
 import { EmptyState, buttonClass } from '../ui'
 import { OFFERS } from '@/lib/catalog'
@@ -18,7 +19,7 @@ export function StoreView() {
         <EmptyState
           icon="gift"
           title="Masz już całą bibliotekę"
-          text="Nie ma już nic do odblokowania. Idź dalej swoją ścieżką i dziel się tym, czego się uczysz, z braćmi i siostrami."
+          text="Nie ma nic więcej do odblokowania. Idź dalej swoją ścieżką i dziel się tym, czego się uczysz, z braćmi i siostrami."
           action={
             <Link href="/czytaj" className={buttonClass.primary}>
               Przejdź do czytania
@@ -27,8 +28,9 @@ export function StoreView() {
         />
       ) : (
         <div className="space-y-6">
+          <AnualCard />
           {pending.map((o) => (
-            <OfferCard key={o.id} offer={o} email={s.session?.email} />
+            <OfferCard key={o.id} offer={o} />
           ))}
         </div>
       )}

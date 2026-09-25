@@ -21,9 +21,9 @@ export function CommunityView() {
   const [tab, setTab] = useState<Tab>(params.get('tab') === 'constancia' ? 'constancia' : 'muro')
   return (
     <>
-      <PageHeader title="Wspólnota" subtitle="Dziel się swoją drogą i ucz się razem z braćmi i siostrami" />
+      <PageHeader title="Społeczność" subtitle="Dziel się swoją drogą i ucz się razem z braćmi i siostrami" />
       <Segmented
-        label="Sekcje wspólnoty"
+        label="Sekcje społeczności"
         value={tab}
         onChange={setTab}
         options={[
@@ -116,7 +116,7 @@ function Composer({ name, lastLesson }: { name: string; lastLesson: string | nul
           onChange={(e) => setText(e.target.value)}
           rows={3}
           maxLength={1500}
-          placeholder="Co Bóg powiedział dziś do twojego serca?"
+          placeholder="Co Bóg powiedział ci dzisiaj?"
           className="min-w-0 flex-1 resize-none rounded-2xl border border-line bg-surface-2 px-4 py-3 text-[16px] leading-relaxed text-ink placeholder:text-muted focus:border-primary focus:outline-none"
         />
       </div>
@@ -124,7 +124,7 @@ function Composer({ name, lastLesson }: { name: string; lastLesson: string | nul
         <label className="mt-3 flex min-h-11 items-center gap-3 text-[15px] text-text">
           <input type="checkbox" checked={linked} onChange={(e) => setLinked(e.target.checked)} className="size-5 accent-primary" />
           <span>
-            Dotyczy lekcji <strong className="text-ink">{lesson.lesson.title}</strong>
+            O lekcji <strong className="text-ink">{lesson.lesson.title}</strong>
           </span>
         </label>
       )}
@@ -264,7 +264,7 @@ function Standing() {
         value={mode}
         onChange={setMode}
         options={[
-          { value: 'semana', label: 'Punkty tygodnia' },
+          { value: 'semana', label: 'Punkty w tym tygodniu' },
           { value: 'racha', label: 'Seria' },
         ]}
       />
@@ -288,11 +288,11 @@ function Standing() {
         <p className="font-serif text-[18px] font-semibold text-ink">Jak zdobywać punkty</p>
         <ul className="mt-3 space-y-2 text-[15.5px] text-text">
           <li className="flex justify-between gap-3"><span>Przeczytana lekcja</span><strong className="text-ink">+{POINTS.lesson}</strong></li>
-          <li className="flex justify-between gap-3"><span>Napisana refleksja</span><strong className="text-ink">+{POINTS.reflection}</strong></li>
+          <li className="flex justify-between gap-3"><span>Zapisana refleksja</span><strong className="text-ink">+{POINTS.reflection}</strong></li>
           <li className="flex justify-between gap-3"><span>Wpis na tablicy</span><strong className="text-ink">+{POINTS.post}</strong></li>
         </ul>
         <p className="mt-4 text-[14.5px] leading-relaxed text-muted">
-          Seria to liczba dni z rzędu, w które przeczytasz co najmniej jedno streszczenie. Ranking tygodnia zeruje się w każdy poniedziałek, żeby każdy mógł dotrzeć na szczyt.
+          Seria to liczba dni z rzędu, w które czytasz przynajmniej jedno streszczenie. Ranking tygodniowy zeruje się w każdy poniedziałek, żeby każdy mógł dotrzeć na szczyt.
         </p>
       </div>
     </>

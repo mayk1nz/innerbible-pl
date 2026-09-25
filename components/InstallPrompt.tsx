@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { usePathname } from 'next/navigation'
-import { Icon } from './icons'
+import { Icon, type IconName } from './icons'
 import { BrandMark, buttonClass } from './ui'
 import { APP } from '@/lib/config'
 import { dismissInstall, promptInstall, useInstallDismissed, useInstallStatus } from '@/lib/install'
@@ -15,11 +15,11 @@ const TEXT = {
   close: 'Zamknij',
   iosStep1: 'Stuknij przycisk Udostępnij',
   iosStep2: 'Wybierz „Do ekranu początkowego”',
-  profileRow: 'Zainstaluj aplikację na tym urządzeniu',
+  noDialog: 'Jeśli nie widzisz okna, otwórz menu przeglądarki i wybierz „Zainstaluj aplikację”.',
 }
 
 /** Pages where the banner must never appear (the sales funnel). */
-const HIDDEN_ON = ['/', '/quiz', '/up1', '/up2']
+const HIDDEN_ON = ['/', '/quiz', '/upsell', '/upsell-downsell', '/slowa-pana', '/slowa-pana-downsell']
 /** Pages without the bottom navigation bar. */
 const NO_NAV = ['/logowanie', '/witaj']
 
@@ -54,7 +54,7 @@ export function InstallBanner() {
   const aboveNav = !NO_NAV.includes(pathname)
   return (
     <>
-      {/* Scroll room, so the banner never hides the end of the page (e.g. the support link). */}
+      {/* Scroll room, so the banner never hides the end of the page (e.g. "Escríbenos"). */}
       <div aria-hidden className={status === 'ios' ? 'h-52' : 'h-44'} />
       <div
         role="dialog"
@@ -93,33 +93,67 @@ export function InstallBanner() {
               </button>
             </div>
           )}
+          {status !== 'ios' && <p className="mt-2.5 text-center text-[13px] leading-snug text-muted">{TEXT.noDialog}</p>}
         </div>
       </div>
     </>
   )
 }
 
-/** Permanent entry in the profile, for whoever closed the banner. */
-export function InstallRow() {
+function Step({ icon, children }: { icon: IconName; children: ReactNode }) {
+  return (
+    <li className="flex items-start gap-2.5">
+      <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-surface-2 text-primary">
+        <Icon name={icon} className="size-[18px]" />
+      </span>
+      <span className="pt-1">{children}</span>
+    </li>
+  )
+}
+
+/** How to install by hand, for when the browser shows no dialog (or has none). */
+export function InstallHelp({ ios }: { ios: boolean }) {
+  return (
+    <div className="text-[15px] leading-snug text-ink">
+      {ios ? (
+        <IosSteps />
+      ) : (
+        <ol className="mt-1 space-y-2.5">
+          <Step icon="phone">
+            <strong className="font-semibold">Android (Chrome):</strong> stuknij menu <strong>⋮</strong> w prawym górnym rogu i wybierz „Zainstaluj aplikację” lub „Dodaj do ekranu głównego”.
+          </Step>
+          <Step icon="download">
+            <strong className="font-semibold">Komputer (Chrome lub Edge):</strong> kliknij ikonę instalacji na pasku adresu albo w menu <strong>⋮</strong> → „Zainstaluj {APP.name}”.
+          </Step>
+          <Step icon="share">
+            <strong className="font-semibold">iPhone:</strong> otwórz tę stronę w Safari, stuknij Udostępnij i wybierz „Do ekranu początkowego”.
+          </Step>
+        </ol>
+      )}
+      <p className="mt-3 rounded-xl bg-gold-soft/60 px-3 py-2 text-[14px] text-ink">{TEXT.noDialog}</p>
+    </div>
+  )
+}
+
+/**
+ * Permanent entry in the profile. Always does something: opens the browser's dialog when
+ * it can, and always unfolds the steps to install by hand — the dialog may not show.
+ */
+export function InstallRow({ children }: { children: (open: boolean) => ReactNode }) {
   const status = useInstallStatus()
   const [open, setOpen] = useState(false)
-
-  if (status !== 'available' && status !== 'ios') return null
+  const click = () => {
+    if (status === 'available' && !open) void promptInstall()
+    setOpen((o) => !o)
+  }
   return (
-    <div className="rounded-2xl border border-line bg-surface">
-      <button
-        type="button"
-        onClick={() => (status === 'available' ? void promptInstall() : setOpen((o) => !o))}
-        aria-expanded={status === 'ios' ? open : undefined}
-        className="flex w-full items-center gap-3 rounded-2xl p-4 text-left transition hover:bg-surface-hover"
-      >
-        <Icon name="download" className="size-5 text-gold" />
-        <span className="flex-1 text-[16px] text-ink">{TEXT.profileRow}</span>
-        <Icon name={status === 'ios' && open ? 'chevronDown' : 'chevronRight'} className="size-5 text-muted" />
+    <div>
+      <button type="button" onClick={click} aria-expanded={open} className="block w-full text-left transition hover:bg-surface-hover">
+        {children(open)}
       </button>
-      {status === 'ios' && open && (
-        <div className="px-4 pb-4">
-          <IosSteps />
+      {open && (
+        <div className="animate-rise px-4 pb-4">
+          <InstallHelp ios={status === 'ios'} />
         </div>
       )}
     </div>

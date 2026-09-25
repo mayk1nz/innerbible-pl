@@ -7,18 +7,153 @@ import { Cover } from '../Cover'
 import { Icon } from '../icons'
 import { PageHeader } from '../PageHeader'
 import { EmptyState, ProgressBar, SearchInput, buttonClass } from '../ui'
-import { productById, type Lesson, type Product } from '@/lib/catalog'
-import { allLessons, isOwned, lessonHref, lessonKey, nextLesson, productProgress } from '@/lib/progress'
-import { toggleLesson, useAppState, type AppState } from '@/lib/store'
-import { normalize } from '@/lib/text'
+import { productById, type Lesson, type Product, type Section } from '@/lib/catalog'
+import { allLessons, currentPlanDay, isOwned, lessonHref, lessonKey, nextLesson, planDayStatus, productProgress } from '@/lib/progress'
+import { toggleLesson, useAppState, useToday, type AppState } from '@/lib/store'
+import { normalize, plural } from '@/lib/text'
 
 export function ModuleView({ productId }: { productId: string }) {
   const s = useAppState()
   const product = productById(productId)
   if (!product) return null
-  if (!isOwned(product, s.owned)) return <LockedProduct product={product} email={s.session?.email} />
+  if (!isOwned(product, s.owned)) return <LockedProduct product={product} />
   if (product.kind === 'enlace') return <LinkProduct product={product} />
+  if (product.tabs) return <TabbedModule product={product} completed={s.completed} lastLesson={s.lastLesson} />
   return <ModuleContent product={product} completed={s.completed} />
+}
+
+// ─── Products with tabs (Palabras del Señor: the guide + its 90-day plans) ────
+
+function TabbedModule({ product, completed, lastLesson }: { product: Product; completed: AppState['completed']; lastLesson: string | null }) {
+  // Open on the tab of the lesson read last, if it belongs to this product.
+  const [tab, setTab] = useState(() => {
+    const lastId = lastLesson?.startsWith(`${product.id}/`) ? lastLesson.slice(product.id.length + 1) : null
+    return product.sections.find((sec) => sec.lessons.some((l) => l.id === lastId))?.id ?? product.sections[0]?.id
+  })
+  const section = product.sections.find((sec) => sec.id === tab) ?? product.sections[0]
+  if (!section) return null
+
+  return (
+    <>
+      <PageHeader back="/czytaj" title={product.title} />
+      {/* A grid, not a sideways-scrolling row: every section stays visible (with a mouse
+          there is no way to tell that a row scrolls). */}
+      <div role="tablist" aria-label={`Sekcje: ${product.title}`} className="grid grid-cols-2 gap-2">
+        {product.sections.map((sec) => {
+          const active = sec.id === section.id
+          return (
+            <button
+              key={sec.id}
+              type="button"
+              role="tab"
+              id={`tab-${sec.id}`}
+              aria-selected={active}
+              aria-controls={`panel-${sec.id}`}
+              onClick={() => setTab(sec.id)}
+              className={`flex min-h-14 flex-col items-center justify-center rounded-2xl border px-3 py-2 text-center transition ${
+                active ? 'border-primary bg-primary text-white shadow-card' : 'border-line bg-surface text-ink hover:bg-surface-hover'
+              }`}
+            >
+              <span className="text-[15px] font-semibold leading-tight">{sec.tab ?? sec.title}</span>
+              <span className={`mt-0.5 text-[12.5px] ${active ? 'text-white/75' : 'text-muted'}`}>
+                {sec.plan ? `Plan na ${plural(sec.lessons.length, 'dzień', 'dni', 'dni')}` : 'Przewodnik'}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+      <div role="tabpanel" id={`panel-${section.id}`} aria-labelledby={`tab-${section.id}`} className="mt-5">
+        {section.plan ? (
+          <PlanPanel product={product} section={section} completed={completed} />
+        ) : (
+          <>
+            <h2 className="mb-3 font-serif text-[20px] font-semibold text-ink">{section.title}</h2>
+            <ul className="space-y-2.5">
+              {section.lessons.map((lesson, i) => (
+                <LessonRow key={lesson.id} product={product} lesson={lesson} n={i + 1} done={Boolean(completed[lessonKey(product.id, lesson.id)])} />
+              ))}
+            </ul>
+          </>
+        )}
+      </div>
+    </>
+  )
+}
+
+function PlanPanel({ product, section, completed }: { product: Product; section: Section; completed: AppState['completed'] }) {
+  const today = useToday()
+  const total = section.lessons.length
+  const done = section.lessons.filter((l) => completed[lessonKey(product.id, l.id)]).length
+  const pct = total ? Math.round((done / total) * 100) : 0
+  const current = currentPlanDay(product.id, section, completed, today)
+
+  return (
+    <>
+      <div className="rounded-3xl border border-line bg-surface p-5 shadow-card">
+        <h2 className="font-serif text-[20px] font-semibold leading-snug text-ink">{section.title}</h2>
+        {section.plan && <p className="mt-1 text-[15.5px] leading-snug text-muted">{section.plan.goal}</p>}
+        <div className="mt-4 flex items-baseline justify-between gap-3">
+          <p className="text-[15.5px] text-text">
+            <strong className="text-ink">{done}</strong> z {total} dni
+          </p>
+          <p className="font-serif text-[24px] font-semibold tabular-nums text-ink">{pct}%</p>
+        </div>
+        <div className="mt-2">
+          <ProgressBar value={pct} label={`Postęp: ${section.title}`} />
+        </div>
+        {!current ? (
+          <p className="mt-4 flex items-center justify-center gap-2 rounded-2xl bg-success-soft p-3 text-[15.5px] font-semibold text-success">
+            <Icon name="trophy" className="size-5" />
+            Wszystkie {total} dni za tobą!
+          </p>
+        ) : current.status === 'open' ? (
+          <Link href={lessonHref(product.id, current.lesson.id)} className={`${buttonClass.primary} mt-4`}>
+            {done ? `Czas na Dzień ${current.n}` : 'Zacznij Dzień 1'}
+            {current.lesson.subtitle ? `: ${current.lesson.subtitle}` : ''}
+            <Icon name="arrowRight" className="size-5 shrink-0 text-gold-bright" />
+          </Link>
+        ) : (
+          <p className="mt-4 flex items-center justify-center gap-2 rounded-2xl bg-gold-soft/60 p-3 text-center text-[15.5px] font-medium text-ink">
+            <Icon name="check" className="size-5 shrink-0 text-success" strokeWidth={2.6} />
+            Dzisiejszy dzień ukończony. Dzień {current.n} otworzy się jutro.
+          </p>
+        )}
+      </div>
+
+      <ol className="mt-5 grid grid-cols-6 gap-2" aria-label={`Dni planu: ${section.title}`}>
+        {section.lessons.map((lesson, i) => {
+          const status = planDayStatus(product.id, section, lesson.id, completed, today) ?? 'open'
+          const n = i + 1
+          if (status === 'done' || status === 'open') {
+            return (
+              <li key={lesson.id}>
+                <Link
+                  href={lessonHref(product.id, lesson.id)}
+                  aria-label={`Dzień ${n}${status === 'done' ? ', ukończony' : ', dostępny'}`}
+                  className={`grid aspect-square place-items-center rounded-xl text-[14px] font-semibold tabular-nums transition ${
+                    status === 'done' ? 'bg-success text-white' : 'bg-primary text-white ring-2 ring-gold-bright ring-offset-2 ring-offset-bg'
+                  }`}
+                >
+                  {status === 'done' ? <Icon name="check" className="size-4" strokeWidth={3} /> : n}
+                </Link>
+              </li>
+            )
+          }
+          return (
+            <li key={lesson.id}>
+              <span
+                aria-label={`Dzień ${n}, ${status === 'tomorrow' ? 'otworzy się jutro' : 'zablokowany'}`}
+                className="grid aspect-square place-items-center rounded-xl border border-line-soft bg-surface text-[13.5px] tabular-nums text-muted"
+              >
+                {n}
+              </span>
+            </li>
+          )
+        })}
+      </ol>
+      <p className="mt-3 text-center text-[14px] text-muted">Jeden dzień naraz: każdy kolejny dzień otwiera się nazajutrz po ukończeniu poprzedniego.</p>
+    </>
+  )
 }
 
 function LinkProduct({ product }: { product: Product }) {
@@ -35,7 +170,7 @@ function LinkProduct({ product }: { product: Product }) {
               Dołącz do grupy
             </a>
           ) : (
-            <p className="mt-5 rounded-2xl bg-gold-soft/60 p-4 text-[15.5px] text-ink">Link do grupy pojawi się tutaj już wkrótce.</p>
+            <p className="mt-5 rounded-2xl bg-gold-soft/60 p-4 text-[15.5px] text-ink">Link do grupy pojawi się tu już wkrótce.</p>
           )}
         </div>
       </div>
@@ -100,7 +235,6 @@ function ModuleContent({ product, completed }: { product: Product; completed: Ap
       <div className="rounded-3xl border border-line bg-surface p-5 shadow-card">
         <div className="flex items-baseline justify-between gap-3">
           <p className="text-[15.5px] text-text">
-            {/* "z N lekcji" is genitive, identical for every N — no plural helper needed. */}
             <strong className="text-ink">{progress.done}</strong> z {progress.total} lekcji
           </p>
           <p className="font-serif text-[26px] font-semibold tabular-nums text-ink">{progress.pct}%</p>
@@ -110,13 +244,13 @@ function ModuleContent({ product, completed }: { product: Product; completed: Ap
         </div>
         {next ? (
           <Link href={lessonHref(product.id, next.lesson.id)} className={`${buttonClass.primary} mt-4`}>
-            {progress.done ? 'Kontynuuj' : 'Zacznij'}: {next.lesson.title}
+            {progress.done ? 'Czytaj dalej' : 'Zacznij'}: {next.lesson.title}
             <Icon name="arrowRight" className="size-5 shrink-0 text-gold-bright" />
           </Link>
         ) : (
           <p className="mt-4 flex items-center justify-center gap-2 rounded-2xl bg-success-soft p-3 text-[15.5px] font-semibold text-success">
             <Icon name="trophy" className="size-5" />
-            Ścieżka ukończona!
+            Cała ścieżka za tobą!
           </p>
         )}
       </div>

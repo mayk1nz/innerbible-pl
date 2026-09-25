@@ -19,7 +19,7 @@ function LockOverlay({ compact = false }: { compact?: boolean }) {
   return (
     <div className="absolute inset-0 bg-[#0b0906]/35">
       <span
-        className={`absolute flex items-center gap-1 rounded-full bg-[#fdf7e8] font-semibold text-ink shadow-card ${compact ? 'right-1 top-1 p-1' : 'right-2.5 top-2.5 px-2.5 py-1 text-[12.5px]'}`}
+        className={`absolute flex items-center gap-1 rounded-full bg-[#fdf7e8] font-semibold text-[#35260f] shadow-card ${compact ? 'right-1 top-1 p-1' : 'right-2.5 top-2.5 px-2.5 py-1 text-[12.5px]'}`}
       >
         <Icon name="lock" className={compact ? 'size-3.5' : 'size-3.5'} strokeWidth={2.2} />
         {!compact && 'Zablokowane'}
@@ -28,7 +28,7 @@ function LockOverlay({ compact = false }: { compact?: boolean }) {
   )
 }
 
-export function Cover({ cover, size, locked = false }: { cover: CoverStyle; size: 'hero' | 'tile' | 'thumb'; locked?: boolean }) {
+export function Cover({ cover, size, locked = false }: { cover: CoverStyle; size: 'hero' | 'banner' | 'tile' | 'thumb'; locked?: boolean }) {
   if (size === 'thumb') {
     return (
       <div aria-hidden className="relative size-[76px] shrink-0 overflow-hidden rounded-xl" style={background(cover)}>
@@ -37,6 +37,21 @@ export function Cover({ cover, size, locked = false }: { cover: CoverStyle; size
           <span className="font-serif text-[10px] font-bold uppercase leading-tight tracking-wide text-[#f6e9c8]">{cover.highlight}</span>
         </div>
         {locked && <LockOverlay compact />}
+      </div>
+    )
+  }
+
+  // A banner is the hero's type on a short strip: the offer below gets the room.
+  if (size === 'banner') {
+    return (
+      <div aria-hidden className="relative flex h-36 w-full flex-col items-center justify-center overflow-hidden px-5 text-center" style={background(cover)}>
+        <span className="font-serif text-[14px] font-medium uppercase leading-[1.1] tracking-[0.06em] text-[#fbf1dc] [text-shadow:0_0_24px_rgba(255,220,160,0.35)]">
+          {cover.lines.join(' ')}
+        </span>
+        <span className={`mt-1 font-serif font-black uppercase leading-none text-gold-bright ${cover.highlight.length >= 7 ? 'text-[34px]' : 'text-[44px]'}`}>
+          {cover.highlight}
+        </span>
+        {locked && <LockOverlay />}
       </div>
     )
   }
@@ -63,7 +78,8 @@ export function Cover({ cover, size, locked = false }: { cover: CoverStyle; size
           {APP.name}
         </span>
       </div>
-      {locked && <LockOverlay />}
+      {/* On a tile the lock is just the icon: the tile already says "Desbloquear", and its corner holds the 50% badge. */}
+      {locked && <LockOverlay compact={!hero} />}
     </div>
   )
 }
