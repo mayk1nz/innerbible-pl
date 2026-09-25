@@ -1,7 +1,9 @@
 import type { Metadata, Viewport } from 'next'
 import type { ReactNode } from 'react'
 import { Figtree, Literata } from 'next/font/google'
+import { InstallBanner } from '@/components/InstallPrompt'
 import { APP } from '@/lib/config'
+import { installBootstrap } from '@/lib/install-bootstrap'
 import './globals.css'
 
 // Literata was drawn for long-form reading on screens (it is the Google Play Books
@@ -28,7 +30,14 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="pl" className={`${literata.variable} ${figtree.variable}`}>
-      <body>{children}</body>
+      <head>
+        {/* Must run before the bundles: the install event can fire before React loads. */}
+        <script dangerouslySetInnerHTML={{ __html: installBootstrap(process.env.NODE_ENV === 'production') }} />
+      </head>
+      <body>
+        {children}
+        <InstallBanner />
+      </body>
     </html>
   )
 }

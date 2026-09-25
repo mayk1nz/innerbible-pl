@@ -4,7 +4,7 @@
 export const APP = {
   name: 'Biblia Wewnętrzna',
   tagline: 'Cała historia Biblii, po kolei i we wspólnocie',
-  supportEmail: 'soporte@innerbible.app',
+  supportEmail: 'contact@innerbible.app',
 } as const
 
 export const WHATSAPP_URL = process.env.NEXT_PUBLIC_WHATSAPP_URL || ''

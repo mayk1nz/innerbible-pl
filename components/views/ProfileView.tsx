@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useMemo } from 'react'
 import { Icon, type IconName } from '../icons'
+import { InstallRow } from '../InstallPrompt'
 import { PageHeader } from '../PageHeader'
 import { Avatar, FontScaleControl, SectionTitle, buttonClass } from '../ui'
 import { OFFERS } from '@/lib/catalog'
@@ -81,6 +82,9 @@ export function ProfileView() {
       </div>
 
       <SectionTitle>Pomoc</SectionTitle>
+      <div className="mb-3 empty:hidden">
+        <InstallRow />
+      </div>
       <a href={`mailto:${APP.supportEmail}`} className="flex items-center gap-3 rounded-2xl border border-line bg-surface p-4 transition hover:bg-surface-hover">
         <Icon name="mail" className="size-5 text-gold" />
         <span className="flex-1 text-[16px] text-ink">Napisz do nas: {APP.supportEmail}</span>
