@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+/* Parchment and ink. Built for long reading by a 45+ audience: warm ground, dark
+   brown text, navy for actions, gold only as an accent. Every text colour here
+   passes WCAG AA on --color-bg and --color-surface. */
+@theme {
+  --color-bg: #f8f3e8;
+  --color-surface: #f3e9d3;
+  --color-surface-2: #fffdf8;
+  --color-surface-hover: #eee1c3;
+  --color-line: #e2d2ac;
+  --color-line-soft: #ebdfc4;
+
+  --color-ink: #35260f;
+  --color-text: #4a3c29;
+  --color-muted: #6b5c47;
+
+  --color-primary: #1b2d4b;
+  --color-primary-hover: #243a5f;
+  --color-gold: #8a5f0c;
+  --color-gold-soft: #ead8a8;
+  --color-gold-bright: #e0ac4a;
+  --color-flame: #c2410c;
+  --color-success: #2d7250;
+  --color-success-soft: #dcebdf;
+  --color-danger: #a3372b;
+
+  --font-serif: var(--font-literata), Georgia, "Times New Roman", serif;
+  --font-sans: var(--font-figtree), system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  --shadow-card: 0 1px 0 rgb(53 38 15 / 0.04), 0 8px 20px -14px rgb(53 38 15 / 0.45);
+  --shadow-float: 0 14px 34px -14px rgb(27 45 75 / 0.55);
+}
+
+html {
+  background: var(--color-bg);
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  min-height: 100dvh;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* tabindex="-1" elements (e.g. step headings) only get programmatic focus for screen
+   readers; a ring there would look like a stray box. */
+:focus-visible:not([tabindex='-1']) {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--color-gold-soft);
+  color: var(--color-ink);
+}
+
+button:not(:disabled) {
+  cursor: pointer;
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes pop {
+  0% { transform: scale(0.6); }
+  60% { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}
+
+.animate-rise { animation: rise 0.35s ease-out both; }
+.animate-pop { animation: pop 0.4s ease-out both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-rise, .animate-pop { animation: none; }
+}

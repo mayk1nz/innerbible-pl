@@ -1,0 +1,33 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+
+# next.js
+/.next/
+/out/
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+
+# env files (.env.example is committed on purpose)
+.env*
+!.env.example
+
+# vercel
+.vercel
+
+# build temp/cache kept off drive C:
+/.tmp/
+
+# third-party reference material, never published
+/funil quiz/
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
